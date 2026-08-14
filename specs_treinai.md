@@ -47,6 +47,7 @@ O sistema consiste em uma aplicação desktop distribuída para treinamento fede
 * **Compatibilidade do Modelo:** O modelo federado deve manter forma de entrada `(32, 32, 3)` e número de classes consistente entre os clientes e o servidor. O número e a ordem das classes são fixados como uma constante compartilhada (`NUM_CLASSES`/lista de classes) em `model.py` — nunca inferidos dinamicamente a partir do diretório local de cada cliente — garantindo que os pesos permaneçam compatíveis com a arquitetura compartilhada.
 * **Dados Locais:** Os clientes devem aceitar diretórios contendo uma subpasta por classe e formatos de imagem suportados pelo carregador do Keras, sem fabricar amostras para completar o conjunto.
 * **Portabilidade:** A aplicação deve ser compatível com ambientes desktop Windows e Linux executando Python 3.10+.
+* **Isolamento de Ambiente:** Cada instância (cliente ou servidor) deve ser executada dentro de seu próprio ambiente virtual (`venv`), isolando as dependências de cada processo e evitando conflitos com pacotes instalados globalmente no sistema.
 
 ### 1.6. Casos Extremos
 * **Credenciais/Hash Inválidos:** Como o hash SHA-256 é derivado diretamente do login e da senha, qualquer credencial que não corresponda a um dos dois registros mockados produz um hash que não bate com nenhum dos hashes esperados pelo servidor; nesse caso, a conexão gRPC deve ser rejeitada imediatamente, antes do início do treinamento local, com uma mensagem genérica de falha de autenticação, sem indicar qual campo está incorreto.
@@ -78,10 +79,11 @@ O sistema será estruturado nos seguintes módulos:
    - **Treinamento e persistência local**: execução de `model.fit` com o `StopTrainingCallback`, avaliação e registro, ao final de cada época, de loss/accuracy de treino e validação em `results.txt` local ao cliente.
 
 3. **Servidor Central Desktop (`server_gui.py` e `server_logic.py`):**
-   - **`ServerGUI`**: Interface PyQt6 para o operador do servidor definir a porta/IP de escuta, visualizar logs de conexões (incluindo tentativas de autenticação rejeitadas) e controlar o serviço. Não possui campo de hash — a validação é automática via `AuthInterceptor`.
-   - **`AuthInterceptor`**: Interceptor gRPC que lê o hash de autenticação enviado nos metadados do handshake do cliente e o compara com os hashes recalculados, via `generate_auth_hash`, a partir dos dois registros mockados carregados de `mock_users.json` (o mesmo arquivo de referência usado pelo cliente).
-   - **`FlowerServerWorker`**: `QThread` responsável por rodar o `flwr.server.start_server` em segundo plano.
-   - **`AggregationStrategy`**: subclasse de `flwr.server.strategy.FedAvg` que agrega, por média federada, os parâmetros recebidos dos clientes e, ao final da última rodada, instancia a CNN via `create_cnn_model` (com o mesmo `NUM_CLASSES` de `model.py`), aplica os pesos agregados via `model.set_weights` e salva o resultado em `cnn_model.keras` — este é o único ponto que persiste o modelo global.
+   - **`ServerGUI`**: Interface PyQt6 para o operador do servidor definir a porta/IP de escuta, visualizar logs de conexões (incluindo tentativas de autenticação rejeitadas) e controlar o serviço. Não possui campo de hash — a validação é automática via `AggregationStrategy`.
+   - **Autenticação via `AggregationStrategy.configure_fit`/`configure_evaluate`**: validado empiricamente que interceptar a autenticação em `ClientManager.register()` (chamando `client.get_properties()` a partir dali) trava para sempre nesta versão do Flower — `GrpcBridge.request()` espera, sem timeout, por uma resposta que só pode chegar depois que o próprio `register()` retornar, um deadlock estrutural do transporte gRPC bidirecional legado. Por isso a validação do hash (via `generate_auth_hash`, comparado aos dois registros de `mock_users.json`) acontece em `configure_fit`/`configure_evaluate`, o mesmo ponto em que o Flower já busca dados dos clientes — clientes não autorizados são removidos da lista antes de qualquer `FitIns`/`EvaluateIns` ser enviado, nunca treinam nem contribuem para a agregação. O `ClientManager` usado é o `SimpleClientManager` padrão do Flower.
+   - **`FlowerServerWorker`**: `QThread` responsável por rodar o servidor Flower em segundo plano, via `server_logic.run_server`.
+   - **`run_server`**: não chama `flwr.server.start_server` diretamente — essa função está deprecada nesta versão do Flower e registra signal handlers (`signal.signal`) incondicionalmente, o que levanta `ValueError` fora da thread principal (exatamente o caso do `FlowerServerWorker`/`QThread`). `run_server` reproduz apenas os passos internos necessários (`init_defaults`, `start_grpc_server`, `run_fl`), sem o registro de sinais.
+   - **`AggregationStrategy`**: subclasse de `flwr.server.strategy.FedAvg` que fornece os parâmetros iniciais do modelo diretamente (construídos via `create_cnn_model`, sem depender de nenhum cliente), agrega por média federada os parâmetros dos clientes autorizados e, ao final da última rodada, instancia a CNN via `create_cnn_model` (com o mesmo `NUM_CLASSES` de `model.py`), aplica os pesos agregados via `model.set_weights` e salva o resultado em `cnn_model.keras` — este é o único ponto que persiste o modelo global.
 
 4. **Lógica do Cliente (`client_logic.py`):**
    - **`FlowerNumPyClient`**: Subclasse de `flwr.client.NumPyClient` que instancia a CNN real, carrega o conjunto local de imagens (validando as classes contra `CLASS_NAMES`), implementa `get_parameters`, `fit` (usando `StopTrainingCallback`) e `evaluate`, emite métricas e checa eventos de cancelamento.
@@ -99,6 +101,7 @@ O sistema será estruturado nos seguintes módulos:
 * **Segurança/Criptografia:** Módulo nativo `hashlib`; credenciais mockadas mantidas em `mock_users.json` (uso exclusivo de teste)
 * **Dados e Persistência:** Imagens em diretórios por classe, `Pillow`, `cnn_model.keras` e `results.txt`
 * **Concorrência:** Módulos `threading` e `PyQt6.QtCore.QThread`
+* **Gerenciamento de Ambiente:** `venv` (módulo nativo do Python) para isolar as dependências de cada instância de cliente e do servidor
 
 ---
 
