@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+*.log
+cnn_model.keras
+results.txt
