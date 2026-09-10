@@ -1,65 +1,44 @@
-"""Autenticacao via NOSTR NIP-46 (Nostr Connect): obtem um signer remoto (bunker) e a
-chave publica do usuario logado, usada como identidade em toda a aplicacao -- ao
-invés de login/senha mockados. Suporta os dois fluxos de pareamento com o bunker:
+"""Identidade NOSTR via chave privada (nsec) lida de uma variavel de ambiente.
 
-- `connect_bunker`: o usuario cola uma connection string `bunker://...` ja emitida
-  pelo signer remoto (fluxo iniciado pelo bunker).
-- `build_nostrconnect_uri` + `await_nostrconnect`: o app gera uma URI
-  `nostrconnect://...` (exibida como QR code) e aguarda o signer remoto escanea-la
-  e aprovar a conexao (fluxo iniciado pelo app).
+Alternativa mais simples ao NIP-46 (Nostr Connect) para uso em scripts locais e em
+Codespaces, onde depender de um bunker remoto (com possiveis relays pagos ou fora do
+ar) nao compensa: a chave privada e carregada uma unica vez, em memoria, no processo
+local, e usada para assinar diretamente os eventos NIP-29 (ver nostr_groups.py). Fica
+de fora do repositorio -- deve vir de um arquivo `.env` (nao versionado) ou de uma
+variavel de ambiente ja exportada no shell/Codespace.
 """
 from __future__ import annotations
 
-import secrets
+import os
 from dataclasses import dataclass
-from datetime import timedelta
-from urllib.parse import quote
 
-from nostr_sdk import Keys, NostrConnect, NostrConnectUri
+from dotenv import load_dotenv
+from nostr_sdk import Keys
 
-APP_NAME = "TreinAI"
-DEFAULT_TIMEOUT = timedelta(seconds=120)
+DEFAULT_ENV_VAR = "TREINAI_NSEC"
 
 
 @dataclass
 class AppIdentity:
     """Identidade NOSTR do usuario logado nesta instancia (cliente ou servidor)."""
 
-    signer: NostrConnect
+    signer: Keys
     pubkey_hex: str
 
 
-async def connect_bunker(bunker_uri: str, timeout: timedelta = DEFAULT_TIMEOUT) -> AppIdentity:
-    """Conecta a um bunker remoto a partir de uma connection string bunker://...
-    (fluxo iniciado pelo bunker: o usuario ja aprovou essa conexao do lado do signer)."""
-    uri = NostrConnectUri.parse(bunker_uri)
-    app_keys = Keys.generate()
-    signer = NostrConnect(uri, app_keys, timeout, None)
-    pubkey = await signer.get_public_key_async()
-    if pubkey is None:
-        raise RuntimeError("O bunker nao respondeu com uma chave publica.")
-    return AppIdentity(signer=signer, pubkey_hex=pubkey.to_hex())
+def load_identity_from_env(env_var: str = DEFAULT_ENV_VAR) -> AppIdentity:
+    """Carrega a nsec (hex ou bech32 `nsec1...`) da variavel de ambiente `env_var`.
 
-
-def build_nostrconnect_uri(relay_url: str, app_keys: Keys) -> str:
-    """Monta a URI nostrconnect://... (fluxo iniciado pelo app) a ser exibida como QR
-    para um signer remoto escanear e aprovar."""
-    secret = secrets.token_hex(16)
-    app_pubkey = app_keys.public_key().to_hex()
-    return (
-        f"nostrconnect://{app_pubkey}"
-        f"?relay={quote(relay_url, safe='')}"
-        f"&secret={secret}"
-        f"&name={quote(APP_NAME)}"
-    )
-
-
-async def await_nostrconnect(uri: str, app_keys: Keys, timeout: timedelta = DEFAULT_TIMEOUT) -> AppIdentity:
-    """Aguarda um signer remoto aprovar a URI nostrconnect://... gerada por
-    `build_nostrconnect_uri` (fluxo iniciado pelo app, via QR code)."""
-    parsed = NostrConnectUri.parse(uri)
-    signer = NostrConnect(parsed, app_keys, timeout, None)
-    pubkey = await signer.get_public_key_async()
-    if pubkey is None:
-        raise RuntimeError("Nenhum bunker aprovou a conexao dentro do tempo limite.")
-    return AppIdentity(signer=signer, pubkey_hex=pubkey.to_hex())
+    Tambem carrega um arquivo `.env` na raiz do projeto, se existir, antes de ler a
+    variavel -- assim `TREINAI_NSEC=nsec1...` num `.env` local funciona sem precisar
+    exportar nada manualmente no shell.
+    """
+    load_dotenv()
+    nsec = os.environ.get(env_var, "").strip()
+    if not nsec:
+        raise RuntimeError(
+            f"Variavel de ambiente {env_var} nao definida. Crie um arquivo .env "
+            f"(veja .env.example) com {env_var}=nsec1... ou exporte-a no shell."
+        )
+    keys = Keys.parse(nsec)
+    return AppIdentity(signer=keys, pubkey_hex=keys.public_key().to_hex())

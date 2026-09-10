@@ -1,6 +1,6 @@
-"""Interface grafica do servidor (PyQt6): login NOSTR (NIP-46), relay/grupo NIP-29
-(publica o endereco de escuta no grupo e autoriza clientes pela associacao atual ao
-grupo), logs de conexao e controle do servico."""
+"""Interface grafica do servidor (PyQt6): identidade NOSTR (chave lida de variavel de
+ambiente/.env), relay/grupo NIP-29 (publica o endereco de escuta no grupo e autoriza
+clientes pela associacao atual ao grupo), logs de conexao e controle do servico."""
 import asyncio
 import sys
 import threading

@@ -12,11 +12,11 @@ from datetime import timedelta
 from typing import Callable, Optional
 
 from nostr_sdk import (
+    AsyncNostrSigner,
     Client,
     EventBuilder,
     Filter,
     Kind,
-    NostrConnect,
     PublicKey,
     RelayUrl,
     ReqTarget,
@@ -66,9 +66,10 @@ async def fetch_server_address(relay_url: str, group_id: str) -> Optional[str]:
         await client.disconnect()
 
 
-async def publish_server_address(relay_url: str, signer: NostrConnect, group_id: str, address: str) -> None:
-    """Assina (via NIP-46) e publica no grupo o endereco "host:port" em que o
-    servidor central esta escutando."""
+async def publish_server_address(relay_url: str, signer: AsyncNostrSigner, group_id: str, address: str) -> None:
+    """Assina localmente (com a chave carregada por nostr_auth.load_identity_from_env)
+    e publica no grupo o endereco "host:port" em que o servidor central esta
+    escutando."""
     host, port = address.rsplit(":", 1)
     content = json.dumps({"host": host, "port": int(port)})
     client = await _connected_client(relay_url)

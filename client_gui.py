@@ -1,6 +1,6 @@
-"""Interface grafica do cliente (PyQt6): login NOSTR (NIP-46), relay/grupo NIP-29 para
-descobrir o endereco do servidor central, selecao de dados e controle do treinamento
-(Iniciar/Parar) sem travar a aplicacao."""
+"""Interface grafica do cliente (PyQt6): identidade NOSTR (chave lida de variavel de
+ambiente/.env), relay/grupo NIP-29 para descobrir o endereco do servidor central,
+selecao de dados e controle do treinamento (Iniciar/Parar) sem travar a aplicacao."""
 import sys
 import threading
 from typing import Optional
@@ -200,7 +200,7 @@ class ClientWindow(QWidget):
 def main():
     app = QApplication(sys.argv)
 
-    login_dialog = NostrLoginDialog()
+    login_dialog = NostrLoginDialog(require_membership=True)
     if login_dialog.exec() != QDialog.DialogCode.Accepted or login_dialog.identity is None:
         sys.exit(0)
 

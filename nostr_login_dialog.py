@@ -1,11 +1,11 @@
-"""Dialogo de login NOSTR (NIP-46) reutilizado por client_gui.py e server_gui.py:
-conecta a um bunker remoto (colando bunker://... ou escaneando um QR nostrconnect://...)
-e, apos autenticado, coleta o relay e o id do grupo (NIP-29) declarados pelo usuario."""
+"""Dialogo de identidade NOSTR reutilizado por client_gui.py e server_gui.py: carrega
+a chave (nsec) a partir da variavel de ambiente / `.env` (ver nostr_auth.py) e, uma
+vez carregada, coleta o relay e o id do grupo (NIP-29) declarados pelo usuario. Se
+`require_membership=True` (usado pelo cliente), ao confirmar o grupo o dialogo checa
+na hora se essa chave ja esta cadastrada (adicionada por um admin) nesse grupo antes
+de liberar a janela principal."""
 from typing import Optional
 
-import qrcode
-from PIL.ImageQt import ImageQt
-from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -13,93 +13,40 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QStackedWidget,
-    QTabWidget,
     QVBoxLayout,
-    QWidget,
 )
 
 from async_worker import AsyncTask
-from nostr_auth import AppIdentity, await_nostrconnect, build_nostrconnect_uri, connect_bunker
-from nostr_sdk import Keys
-
-DEFAULT_PAIRING_RELAY = "wss://relay.nsec.app"
+from nostr_auth import DEFAULT_ENV_VAR, AppIdentity, load_identity_from_env
+from nostr_groups import check_membership
 
 
 class NostrLoginDialog(QDialog):
     """Ao fechar com Accepted, expoe `identity`, `relay_url` e `group_id`."""
 
-    def __init__(self, parent=None):
+    def __init__(self, env_var: str = DEFAULT_ENV_VAR, require_membership: bool = False, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Login NOSTR (NIP-46)")
+        self.setWindowTitle("Identidade NOSTR")
+        self.env_var = env_var
+        self.require_membership = require_membership
         self.identity: Optional[AppIdentity] = None
         self.relay_url: str = ""
         self.group_id: str = ""
-
         self._task: Optional[AsyncTask] = None
-        self._app_keys: Optional[Keys] = None
-        self._qr_image = None  # mantem referencia forte enquanto o QPixmap existir
 
-        self.stack = QStackedWidget()
-        self.stack.addWidget(self._build_login_page())
-        self.stack.addWidget(self._build_group_page())
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.stack)
-        self.setLayout(layout)
-        self.resize(420, 440)
-
-    def _build_login_page(self) -> QWidget:
-        page = QWidget()
-        tabs = QTabWidget()
-
-        bunker_tab = QWidget()
-        self.bunker_input = QLineEdit()
-        self.bunker_input.setPlaceholderText("bunker://...")
-        bunker_connect_btn = QPushButton("Conectar")
-        bunker_connect_btn.clicked.connect(self._connect_bunker)
-        bunker_layout = QVBoxLayout()
-        bunker_layout.addWidget(QLabel("Cole a connection string do seu signer:"))
-        bunker_layout.addWidget(self.bunker_input)
-        bunker_layout.addWidget(bunker_connect_btn)
-        bunker_layout.addStretch(1)
-        bunker_tab.setLayout(bunker_layout)
-
-        qr_tab = QWidget()
-        self.qr_relay_input = QLineEdit(DEFAULT_PAIRING_RELAY)
-        self.qr_label = QLabel("Clique em 'Gerar QR' para iniciar.")
-        self.qr_label.setMinimumSize(220, 220)
-        self.qr_label.setWordWrap(True)
-        qr_generate_btn = QPushButton("Gerar QR")
-        qr_generate_btn.clicked.connect(self._start_nostrconnect)
-        qr_layout = QVBoxLayout()
-        qr_layout.addWidget(QLabel("Relay de pareamento:"))
-        qr_layout.addWidget(self.qr_relay_input)
-        qr_layout.addWidget(self.qr_label)
-        qr_layout.addWidget(qr_generate_btn)
-        qr_tab.setLayout(qr_layout)
-
-        tabs.addTab(bunker_tab, "Colar bunker://")
-        tabs.addTab(qr_tab, "QR nostrconnect://")
-
-        self.login_status = QLabel("")
-
-        layout = QVBoxLayout()
-        layout.addWidget(tabs)
-        layout.addWidget(self.login_status)
-        page.setLayout(layout)
-        return page
-
-    def _build_group_page(self) -> QWidget:
-        page = QWidget()
         self.identity_label = QLabel("")
         self.identity_label.setWordWrap(True)
+        retry_button = QPushButton("Tentar novamente")
+        retry_button.clicked.connect(self._load_identity)
+
         self.relay_input = QLineEdit()
         self.relay_input.setPlaceholderText("wss://relay.exemplo.com")
         self.group_input = QLineEdit()
         self.group_input.setPlaceholderText("id do grupo (NIP-29)")
-        confirm_btn = QPushButton("Confirmar")
-        confirm_btn.clicked.connect(self._confirm_group)
+        self.group_status = QLabel("")
+        self.group_status.setWordWrap(True)
+        self.confirm_button = QPushButton("Confirmar")
+        self.confirm_button.clicked.connect(self._confirm)
 
         form = QFormLayout()
         form.addRow("Relay:", self.relay_input)
@@ -107,59 +54,66 @@ class NostrLoginDialog(QDialog):
 
         layout = QVBoxLayout()
         layout.addWidget(self.identity_label)
+        layout.addWidget(retry_button)
         layout.addLayout(form)
-        layout.addWidget(confirm_btn)
-        layout.addStretch(1)
-        page.setLayout(layout)
-        return page
+        layout.addWidget(self.group_status)
+        layout.addWidget(self.confirm_button)
+        self.setLayout(layout)
+        self.resize(380, 280)
 
-    def _connect_bunker(self):
-        bunker_uri = self.bunker_input.text().strip()
-        if not bunker_uri:
-            QMessageBox.warning(self, "URI ausente", "Cole a connection string bunker://...")
+        self._load_identity()
+
+    def _load_identity(self):
+        try:
+            self.identity = load_identity_from_env(self.env_var)
+        except Exception as exc:
+            self.identity = None
+            self.identity_label.setText(f"Falha ao carregar identidade: {exc}")
+        else:
+            self.identity_label.setText(f"Logado como: {self.identity.pubkey_hex}")
+
+    def _confirm(self):
+        if self.identity is None:
+            QMessageBox.critical(
+                self,
+                "Identidade nao carregada",
+                f"Defina a variavel de ambiente {self.env_var} (ou o arquivo .env) "
+                f"com a nsec e clique em 'Tentar novamente'.",
+            )
             return
-        self.login_status.setText("Conectando ao bunker...")
-        self._task = AsyncTask(lambda: connect_bunker(bunker_uri))
-        self._task.succeeded.connect(self._on_login_ok)
-        self._task.failed.connect(self._on_login_failed)
-        self._task.start()
-
-    def _start_nostrconnect(self):
-        relay_url = self.qr_relay_input.text().strip()
-        if not relay_url:
-            QMessageBox.warning(self, "Relay ausente", "Informe o relay de pareamento.")
-            return
-        self._app_keys = Keys.generate()
-        uri = build_nostrconnect_uri(relay_url, self._app_keys)
-        self._show_qr(uri)
-        self.login_status.setText("Aguardando aprovacao do signer remoto...")
-        self._task = AsyncTask(lambda: await_nostrconnect(uri, self._app_keys))
-        self._task.succeeded.connect(self._on_login_ok)
-        self._task.failed.connect(self._on_login_failed)
-        self._task.start()
-
-    def _show_qr(self, uri: str):
-        image = qrcode.make(uri).convert("RGB")
-        self._qr_image = ImageQt(image)
-        pixmap = QPixmap.fromImage(self._qr_image)
-        self.qr_label.setPixmap(pixmap.scaled(220, 220))
-
-    def _on_login_ok(self, identity: AppIdentity):
-        self.identity = identity
-        self.login_status.setText("")
-        self.identity_label.setText(f"Logado como: {identity.pubkey_hex}")
-        self.stack.setCurrentIndex(1)
-
-    def _on_login_failed(self, message: str):
-        self.login_status.setText("")
-        QMessageBox.critical(self, "Falha no login NOSTR", message)
-
-    def _confirm_group(self):
         relay_url = self.relay_input.text().strip()
         group_id = self.group_input.text().strip()
         if not relay_url or not group_id:
             QMessageBox.warning(self, "Dados incompletos", "Informe o relay e o id do grupo.")
             return
+
+        if not self.require_membership:
+            self.relay_url = relay_url
+            self.group_id = group_id
+            self.accept()
+            return
+
+        self.confirm_button.setEnabled(False)
+        self.group_status.setText("Verificando associacao ao grupo...")
+        self._task = AsyncTask(lambda: check_membership(relay_url, group_id, self.identity.pubkey_hex))
+        self._task.succeeded.connect(lambda is_member: self._on_membership_checked(relay_url, group_id, is_member))
+        self._task.failed.connect(self._on_membership_check_failed)
+        self._task.start()
+
+    def _on_membership_checked(self, relay_url: str, group_id: str, is_member: bool):
+        self.confirm_button.setEnabled(True)
+        if not is_member:
+            self.group_status.setText("Chave nao cadastrada nesse grupo ainda.")
+            QMessageBox.warning(
+                self, "Nao autorizado", "Aguardando ser adicionado ao grupo pelo administrador."
+            )
+            return
+        self.group_status.setText("")
         self.relay_url = relay_url
         self.group_id = group_id
         self.accept()
+
+    def _on_membership_check_failed(self, message: str):
+        self.confirm_button.setEnabled(True)
+        self.group_status.setText("")
+        QMessageBox.critical(self, "Erro ao verificar associacao", message)
