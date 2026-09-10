@@ -1,7 +1,7 @@
 """Logica do servidor central: autenticacao dos clientes e agregacao federada via FedAvg.
 
 Flower nao expoe, na API publica de start_server, um mecanismo para injetar um
-grpc.ServerInterceptor bruto. A alternativa obvia -- validar o hash dentro de
+grpc.ServerInterceptor bruto. A alternativa obvia -- validar a identidade dentro de
 ClientManager.register() -- e estruturalmente um deadlock nesta versao do flwr:
 GrpcBridge.request() (usado por client_proxy.get_properties()) espera, sem
 timeout, por uma resposta que so pode chegar quando o loop de streaming do
@@ -14,6 +14,11 @@ loop de streaming ja esta ativo -- o mesmo ponto em que o proprio Flower busca
 os parametros iniciais de um cliente. Clientes nao autorizados sao removidos
 da lista antes de qualquer FitIns/EvaluateIns ser enviado; nunca treinam nem
 contribuem para a agregacao.
+
+A autorizacao em si (quem esta autorizado) nao vem mais de credenciais mockadas
+(auth.py/mock_users.json), e sim da associacao atual ao grupo NIP-29 declarado
+pelo operador do servidor: `membership_watcher` (ver nostr_groups.py) mantem, em
+segundo plano, o conjunto de pubkeys NOSTR atualmente membros do grupo.
 """
 import logging
 
@@ -27,7 +32,6 @@ from flwr.server.superlink.fleet.grpc_bidi.grpc_server import start_grpc_server
 from flwr.supercore.address import parse_address
 from flwr.supercore.grpc import GRPC_MAX_MESSAGE_LENGTH
 
-from auth import expected_hashes
 from model import NUM_CLASSES, create_cnn_model
 
 logger = logging.getLogger(__name__)
@@ -36,16 +40,17 @@ logger = logging.getLogger(__name__)
 class AggregationStrategy(FedAvg):
     """FedAvg que autentica clientes por rodada e, na ultima rodada, salva o modelo global."""
 
-    def __init__(self, *args, num_rounds: int, model_output_path: str = "cnn_model.keras", **kwargs):
+    def __init__(self, *args, num_rounds: int, membership_watcher, model_output_path: str = "cnn_model.keras", **kwargs):
         super().__init__(*args, **kwargs)
         self.num_rounds = num_rounds
         self.model_output_path = model_output_path
-        self._expected_hashes = expected_hashes()
+        self.membership_watcher = membership_watcher
 
     def _is_authorized(self, client: ClientProxy, server_round: int) -> bool:
         try:
             properties = client.get_properties(GetPropertiesIns(config={}), timeout=10, group_id=server_round)
-            return properties.properties.get("auth_hash") in self._expected_hashes
+            pubkey = properties.properties.get("nostr_pubkey")
+            return bool(pubkey) and self.membership_watcher.is_authorized(pubkey)
         except Exception:
             logger.warning("Falha ao validar credenciais do cliente %s.", client.cid)
             return False
@@ -85,7 +90,7 @@ class AggregationStrategy(FedAvg):
         logger.info("Modelo global salvo em %s", self.model_output_path)
 
 
-def run_server(server_address: str, num_rounds: int = 3, min_clients: int = 2) -> fl.server.History:
+def run_server(server_address: str, membership_watcher, num_rounds: int = 3, min_clients: int = 2) -> fl.server.History:
     """Equivalente a flwr.server.start_server, mas sem registrar signal handlers.
 
     flwr.server.start_server() chama register_signal_handlers() incondicionalmente,
@@ -97,6 +102,7 @@ def run_server(server_address: str, num_rounds: int = 3, min_clients: int = 2) -
     initial_model = create_cnn_model(num_classes=NUM_CLASSES)
     strategy = AggregationStrategy(
         num_rounds=num_rounds,
+        membership_watcher=membership_watcher,
         min_fit_clients=min_clients,
         min_evaluate_clients=min_clients,
         min_available_clients=min_clients,
