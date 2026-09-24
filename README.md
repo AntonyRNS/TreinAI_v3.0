@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 Tanto `server_gui.py` quanto `client_gui.py` abrem, ao iniciar, um diálogo de identidade antes de liberar a janela principal:
 
-1. **Identidade:** a aplicação carrega a chave privada NOSTR (`nsec`) da variável de ambiente `TREINAI_NSEC` — copie `.env.example` para `.env` na raiz do projeto e preencha com uma chave dedicada de testes (aceita `nsec1...` ou hex). Isso substitui, por enquanto, o login remoto via NIP-46 (bunker): a chave fica só em memória, no processo local, sem depender de um signer remoto ou de relays de pareamento. Se a variável não estiver definida, o diálogo mostra o erro e um botão "Tentar novamente" (edite o `.env` e clique nele, sem precisar reiniciar o app).
+1. **Identidade:** no diálogo inicial, o usuário digita sua chave pública NOSTR (`npub1...` ou hex) e sua chave privada (`nsec1...` ou hex). A aplicação confere se a privada corresponde à pública e guarda as duas de forma volátil nas variáveis de ambiente do processo (`TREINAI_NPUB` / `TREINAI_NSEC`) — nada é gravado em disco, e elas somem ao fechar o app. É um login simples provisório, no lugar do login remoto via NIP-46 (bunker).
 2. **Relay e grupo (NIP-29):** com a identidade carregada, informe o relay (`wss://...`) e o id do grupo NIP-29 aos quais a instância vai se associar. O operador do servidor precisa já ser membro/admin desse grupo; cada cliente precisa ter sido adicionado a ele (evento `kind:9000`) por um admin antes de poder treinar — no cliente, ao clicar em "Confirmar", o próprio diálogo já verifica na hora se a chave carregada está cadastrada nesse grupo, e avisa se ainda não estiver.
 
 **Nunca comite o arquivo `.env`** (já está no `.gitignore`) nem uma chave de produção — gere uma chave dedicada para testes.

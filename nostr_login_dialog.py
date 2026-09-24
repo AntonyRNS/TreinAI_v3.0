@@ -1,6 +1,7 @@
-"""Dialogo de identidade NOSTR reutilizado por client_gui.py e server_gui.py: carrega
-a chave (nsec) a partir da variavel de ambiente / `.env` (ver nostr_auth.py) e, uma
-vez carregada, coleta o relay e o id do grupo (NIP-29) declarados pelo usuario. Se
+"""Dialogo de identidade NOSTR reutilizado por client_gui.py e server_gui.py: o usuario
+digita sua chave publica e sua chave privada (login simples provisorio, ver
+nostr_auth.login_with_keys, que as guarda de forma volatil em `os.environ`) junto com
+o relay e o id do grupo (NIP-29). Se
 `require_membership=True` (usado pelo cliente), ao confirmar o grupo o dialogo checa
 na hora se essa chave ja esta cadastrada (adicionada por um admin) nesse grupo antes
 de liberar a janela principal."""
@@ -17,28 +18,27 @@ from PyQt6.QtWidgets import (
 )
 
 from async_worker import AsyncTask
-from nostr_auth import DEFAULT_ENV_VAR, AppIdentity, load_identity_from_env
+from nostr_auth import AppIdentity, login_with_keys
 from nostr_groups import check_membership
 
 
 class NostrLoginDialog(QDialog):
     """Ao fechar com Accepted, expoe `identity`, `relay_url` e `group_id`."""
 
-    def __init__(self, env_var: str = DEFAULT_ENV_VAR, require_membership: bool = False, parent=None):
+    def __init__(self, require_membership: bool = False, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Identidade NOSTR")
-        self.env_var = env_var
         self.require_membership = require_membership
         self.identity: Optional[AppIdentity] = None
         self.relay_url: str = ""
         self.group_id: str = ""
         self._task: Optional[AsyncTask] = None
 
-        self.identity_label = QLabel("")
-        self.identity_label.setWordWrap(True)
-        retry_button = QPushButton("Tentar novamente")
-        retry_button.clicked.connect(self._load_identity)
-
+        self.pubkey_input = QLineEdit()
+        self.pubkey_input.setPlaceholderText("npub1... ou hex")
+        self.privkey_input = QLineEdit()
+        self.privkey_input.setPlaceholderText("nsec1... ou hex")
+        self.privkey_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.relay_input = QLineEdit()
         self.relay_input.setPlaceholderText("wss://relay.exemplo.com")
         self.group_input = QLineEdit()
@@ -49,37 +49,24 @@ class NostrLoginDialog(QDialog):
         self.confirm_button.clicked.connect(self._confirm)
 
         form = QFormLayout()
+        form.addRow("Chave publica:", self.pubkey_input)
+        form.addRow("Chave privada:", self.privkey_input)
         form.addRow("Relay:", self.relay_input)
         form.addRow("Group ID:", self.group_input)
 
         layout = QVBoxLayout()
-        layout.addWidget(self.identity_label)
-        layout.addWidget(retry_button)
         layout.addLayout(form)
         layout.addWidget(self.group_status)
         layout.addWidget(self.confirm_button)
         self.setLayout(layout)
-        self.resize(380, 280)
-
-        self._load_identity()
-
-    def _load_identity(self):
-        try:
-            self.identity = load_identity_from_env(self.env_var)
-        except Exception as exc:
-            self.identity = None
-            self.identity_label.setText(f"Falha ao carregar identidade: {exc}")
-        else:
-            self.identity_label.setText(f"Logado como: {self.identity.pubkey_hex}")
+        self.resize(420, 260)
 
     def _confirm(self):
-        if self.identity is None:
-            QMessageBox.critical(
-                self,
-                "Identidade nao carregada",
-                f"Defina a variavel de ambiente {self.env_var} (ou o arquivo .env) "
-                f"com a nsec e clique em 'Tentar novamente'.",
-            )
+        try:
+            self.identity = login_with_keys(self.pubkey_input.text(), self.privkey_input.text())
+        except ValueError as exc:
+            self.identity = None
+            QMessageBox.critical(self, "Chaves invalidas", str(exc))
             return
         relay_url = self.relay_input.text().strip()
         group_id = self.group_input.text().strip()

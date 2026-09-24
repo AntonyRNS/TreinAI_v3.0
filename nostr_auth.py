@@ -13,9 +13,10 @@ import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
-from nostr_sdk import Keys
+from nostr_sdk import Keys, PublicKey
 
 DEFAULT_ENV_VAR = "TREINAI_NSEC"
+PUBKEY_ENV_VAR = "TREINAI_NPUB"
 
 
 @dataclass
@@ -42,3 +43,25 @@ def load_identity_from_env(env_var: str = DEFAULT_ENV_VAR) -> AppIdentity:
         )
     keys = Keys.parse(nsec)
     return AppIdentity(signer=keys, pubkey_hex=keys.public_key().to_hex())
+
+
+def login_with_keys(public_key: str, private_key: str) -> AppIdentity:
+    """Login simples (provisorio): recebe a chave publica (npub ou hex) e a privada (nsec
+    ou hex) digitadas pelo usuario, confere se a privada gera essa publica e guarda as
+    duas em `os.environ` (TREINAI_NPUB / TREINAI_NSEC). Isso vale so para este processo
+    -- nada e gravado no `.env` nem em disco, e some ao fechar o app.
+    """
+    try:
+        pubkey = PublicKey.parse(public_key.strip())
+    except Exception as exc:
+        raise ValueError(f"Chave publica invalida: {exc}") from exc
+    try:
+        keys = Keys.parse(private_key.strip())
+    except Exception as exc:
+        raise ValueError(f"Chave privada invalida: {exc}") from exc
+    if keys.public_key().to_hex() != pubkey.to_hex():
+        raise ValueError("A chave privada nao corresponde a chave publica informada.")
+
+    os.environ[PUBKEY_ENV_VAR] = pubkey.to_bech32()
+    os.environ[DEFAULT_ENV_VAR] = keys.secret_key().to_bech32()
+    return AppIdentity(signer=keys, pubkey_hex=pubkey.to_hex())
