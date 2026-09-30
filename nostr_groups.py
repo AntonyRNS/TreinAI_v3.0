@@ -78,7 +78,12 @@ async def publish_server_address(relay_url: str, signer: AsyncNostrSigner, group
             [Tag.identifier(SERVER_ADDRESS_IDENTIFIER), Tag.custom("h", [group_id])]
         )
         event = await builder.finalize_async(signer)
-        await client.send_event(event)
+        output = await client.send_event(event)
+        if not output.success:
+            reason = "; ".join(output.failed.values()) or "sem resposta do relay"
+            if "unknown member" in reason:
+                reason += " (a chave do operador precisa ser membro do grupo para publicar nele)"
+            raise RuntimeError(f"O relay recusou o endereco do servidor: {reason}")
     finally:
         await client.disconnect()
 
