@@ -120,12 +120,21 @@ async def watch_membership(
     created_at)` para cada evento kind:9000/9001 (estado inicial + novos eventos),
     ate que `should_stop()` retorne True. Usado pelo MembershipWatcher do servidor
     para autorizar clientes sem precisar de uma consulta de rede a cada handshake."""
+    def report(event):
+        # O autor de um kind:9000/9001 e quem adicionou/removeu (admin ou o proprio
+        # relay); os membros afetados vem nas tags `p`.
+        is_member = event.kind().as_u16() == MEMBER_ADDED_KIND.as_u16()
+        for tag in event.tags():
+            values = tag.to_vec()
+            if len(values) >= 2 and values[0] == "p":
+                on_update(values[1], is_member, event.created_at().as_secs())
+
     client = await _connected_client(relay_url)
     try:
         f = Filter().kinds(MEMBERSHIP_KINDS).custom_tag(_H_TAG, group_id)
 
         for event in await client.fetch_events(ReqTarget.auto([f]), timeout=FETCH_TIMEOUT):
-            on_update(event.author().to_hex(), event.kind().as_u16() == MEMBER_ADDED_KIND.as_u16(), event.created_at().as_secs())
+            report(event)
 
         await client.subscribe(ReqTarget.auto([f]))
         stream = client.notifications()
@@ -137,7 +146,6 @@ async def watch_membership(
             if item is None:
                 break
             if item.is_NEW_EVENT():
-                event = item.event
-                on_update(event.author().to_hex(), event.kind().as_u16() == MEMBER_ADDED_KIND.as_u16(), event.created_at().as_secs())
+                report(item.event)
     finally:
         await client.disconnect()
