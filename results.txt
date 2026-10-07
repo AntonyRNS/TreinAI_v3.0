@@ -160,3 +160,57 @@ Epoca 4: accuracy=0.7623 - loss=0.6871 - val_accuracy=0.6388 - val_loss=1.1075
 Epoca 5: accuracy=0.7721 - loss=0.6589 - val_accuracy=0.6363 - val_loss=1.1263
 Resultado final: accuracy=0.6363 - loss=1.1263
 
+===== Treinamento em 2026-10-07 05:38:55 =====
+Epocas: 5
+Epoca 1: accuracy=0.2335 - loss=2.0459 - val_accuracy=0.3455 - val_loss=1.8488
+Epoca 2: accuracy=0.3735 - loss=1.7080 - val_accuracy=0.4320 - val_loss=1.6245
+Epoca 3: accuracy=0.4411 - loss=1.5340 - val_accuracy=0.4430 - val_loss=1.5982
+Epoca 4: accuracy=0.4807 - loss=1.4284 - val_accuracy=0.4610 - val_loss=1.5570
+Epoca 5: accuracy=0.5054 - loss=1.3607 - val_accuracy=0.4840 - val_loss=1.5007
+Resultado final: accuracy=0.4840 - loss=1.5007
+
+===== Treinamento em 2026-10-07 05:39:26 =====
+Epocas: 5
+Epoca 1: accuracy=0.4035 - loss=1.6435 - val_accuracy=0.4931 - val_loss=1.4117
+Epoca 2: accuracy=0.5421 - loss=1.2847 - val_accuracy=0.5852 - val_loss=1.1953
+Epoca 3: accuracy=0.6025 - loss=1.1271 - val_accuracy=0.6127 - val_loss=1.1158
+Epoca 4: accuracy=0.6392 - loss=1.0271 - val_accuracy=0.6392 - val_loss=1.0372
+Epoca 5: accuracy=0.6662 - loss=0.9515 - val_accuracy=0.6511 - val_loss=1.0075
+Resultado final: accuracy=0.6511 - loss=1.0075
+
+===== Treinamento em 2026-10-07 05:39:47 =====
+Epocas: 5
+Epoca 1: accuracy=0.6219 - loss=1.0779 - val_accuracy=0.6265 - val_loss=1.0807
+Epoca 2: accuracy=0.6696 - loss=0.9399 - val_accuracy=0.6365 - val_loss=1.0463
+Epoca 3: accuracy=0.6995 - loss=0.8479 - val_accuracy=0.6465 - val_loss=1.0388
+Epoca 4: accuracy=0.7287 - loss=0.7743 - val_accuracy=0.6445 - val_loss=1.0590
+Epoca 5: accuracy=0.7516 - loss=0.7159 - val_accuracy=0.6440 - val_loss=1.0992
+Resultado final: accuracy=0.6440 - loss=1.0992
+
+===== Treinamento em 2026-10-07 05:40:13 =====
+Epocas: 5
+Epoca 1: accuracy=0.6799 - loss=0.9181 - val_accuracy=0.6563 - val_loss=0.9784
+Epoca 2: accuracy=0.6992 - loss=0.8577 - val_accuracy=0.6674 - val_loss=0.9570
+Epoca 3: accuracy=0.7181 - loss=0.8089 - val_accuracy=0.6712 - val_loss=0.9505
+Epoca 4: accuracy=0.7334 - loss=0.7655 - val_accuracy=0.6678 - val_loss=0.9671
+Epoca 5: accuracy=0.7474 - loss=0.7285 - val_accuracy=0.6659 - val_loss=0.9804
+Resultado final: accuracy=0.6659 - loss=0.9804
+
+===== Treinamento em 2026-10-07 05:40:35 =====
+Epocas: 5
+Epoca 1: accuracy=0.6950 - loss=0.8751 - val_accuracy=0.6820 - val_loss=0.9380
+Epoca 2: accuracy=0.7350 - loss=0.7600 - val_accuracy=0.6765 - val_loss=0.9646
+Epoca 3: accuracy=0.7650 - loss=0.6793 - val_accuracy=0.6740 - val_loss=0.9962
+Epoca 4: accuracy=0.7939 - loss=0.6063 - val_accuracy=0.6630 - val_loss=1.0382
+Epoca 5: accuracy=0.8181 - loss=0.5469 - val_accuracy=0.6555 - val_loss=1.0902
+Resultado final: accuracy=0.6555 - loss=1.0902
+
+===== Treinamento em 2026-10-07 05:41:01 =====
+Epocas: 5
+Epoca 1: accuracy=0.7527 - loss=0.7133 - val_accuracy=0.6687 - val_loss=0.9765
+Epoca 2: accuracy=0.7625 - loss=0.6775 - val_accuracy=0.6633 - val_loss=1.0029
+Epoca 3: accuracy=0.7757 - loss=0.6465 - val_accuracy=0.6642 - val_loss=1.0211
+Epoca 4: accuracy=0.7845 - loss=0.6208 - val_accuracy=0.6646 - val_loss=1.0407
+Epoca 5: accuracy=0.7923 - loss=0.5978 - val_accuracy=0.6661 - val_loss=1.0636
+Resultado final: accuracy=0.6661 - loss=1.0636
+
