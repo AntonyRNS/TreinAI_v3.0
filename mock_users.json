@@ -1,7 +1,0 @@
-{
-  "_comment": "Credenciais mockadas - uso exclusivo de ambiente de teste. Nao usar em producao.",
-  "users": [
-    {"login": "cientista1", "senha": "treinai@123"},
-    {"login": "cientista2", "senha": "federado@456"}
-  ]
-}

@@ -12,20 +12,29 @@ venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 ```
 
-## 2. Rodar o servidor
+## 2. Identidade NOSTR (chave via variável de ambiente) e grupo (NIP-29)
+
+Tanto `server_gui.py` quanto `client_gui.py` abrem, ao iniciar, um diálogo de identidade antes de liberar a janela principal:
+
+1. **Identidade:** no diálogo inicial, o usuário digita sua chave pública NOSTR (`npub1...` ou hex) e sua chave privada (`nsec1...` ou hex). A aplicação confere se a privada corresponde à pública e guarda as duas de forma volátil nas variáveis de ambiente do processo (`TREINAI_NPUB` / `TREINAI_NSEC`) — nada é gravado em disco, e elas somem ao fechar o app. É um login simples provisório, no lugar do login remoto via NIP-46 (bunker).
+2. **Relay e grupo (NIP-29):** com a identidade carregada, informe o relay (`wss://...`) e o id do grupo NIP-29 aos quais a instância vai se associar. O operador do servidor precisa já ser membro/admin desse grupo; cada cliente precisa ter sido adicionado a ele (evento `kind:9000`) por um admin antes de poder treinar — no cliente, ao clicar em "Confirmar", o próprio diálogo já verifica na hora se a chave carregada está cadastrada nesse grupo, e avisa se ainda não estiver.
+
+**Nunca comite o arquivo `.env`** (já está no `.gitignore`) nem uma chave de produção — gere uma chave dedicada para testes.
+
+## 3. Rodar o servidor
 
 ```bash
 python server_gui.py
 ```
 
-Na janela:
+Depois de carregada a identidade, na janela:
 - **Endereço (IP:porta):** endereço de escuta (padrão `0.0.0.0:8080`).
 - **Rodadas (FedAvg):** número de rounds de agregação federada (padrão `3`).
 - **Mínimo de clientes:** quantos clientes precisam se conectar para cada round iniciar (padrão `2`).
 
-Clique em **Iniciar Servidor**. Ao final do treinamento, o modelo global agregado é salvo em `cnn_model.keras`.
+Clique em **Iniciar Servidor**: o endereço é publicado no grupo NIP-29 declarado (para os clientes descobrirem) e a autorização de cada cliente passa a depender de ele estar atualmente associado a esse grupo. Ao final do treinamento, o modelo global agregado é salvo em `cnn_model.keras`.
 
-## 3. Rodar um cliente
+## 4. Rodar um cliente
 
 Em outro processo/máquina (com seu próprio `venv` ativo):
 
@@ -33,15 +42,14 @@ Em outro processo/máquina (com seu próprio `venv` ativo):
 python client_gui.py
 ```
 
-Na janela:
-- **Login / Senha:** uma das credenciais mockadas em `mock_users.json` (ex.: `cientista1` / `treinai@123`).
-- **Servidor (IP:porta):** endereço do servidor central (ex.: `127.0.0.1:8080` se estiver na mesma máquina).
+Depois de carregada a identidade, na janela:
+- **Buscar Servidor:** preenche automaticamente o endereço IP/porta a partir do que o servidor publicou no grupo (o campo continua editável, como alternativa manual).
 - **Selecionar Pasta de Imagens:** diretório local com uma subpasta por classe (nomes e quantidade devem bater exatamente com `CLASS_NAMES` em `model.py`).
 
-Clique em **Iniciar Treinamento** para conectar ao servidor e treinar localmente; **Parar Treinamento** interrompe de forma graciosa ao fim do lote/época atual. As métricas de cada época são gravadas em `results.txt` local ao cliente.
+Clique em **Iniciar Treinamento**: o app confirma de novo (a associação pode ter mudado desde o login) que sua chave NOSTR está atualmente associada ao grupo antes de conectar ao servidor e treinar localmente; **Parar Treinamento** interrompe de forma graciosa ao fim do lote/época atual. As métricas de cada época são gravadas em `results.txt` local ao cliente.
 
 ## Observações
 
 - Inicie o servidor antes dos clientes; o round só começa quando o número mínimo de clientes estiver conectado.
-- Credenciais inválidas (fora das duas registradas em `mock_users.json`) são rejeitadas no handshake, antes de qualquer treinamento.
-- Repita o passo 3 em quantos clientes forem necessários, cada um apontando para o mesmo endereço de servidor.
+- Um cliente cuja chave NOSTR não esteja (mais) associada ao grupo é rejeitado no handshake, antes de qualquer treinamento.
+- Repita o passo 4 em quantos clientes forem necessários, cada um apontando para o mesmo relay/grupo.

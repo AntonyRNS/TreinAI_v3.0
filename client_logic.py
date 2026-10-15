@@ -4,7 +4,6 @@ from typing import Callable, Optional
 
 import flwr as fl
 
-from auth import generate_auth_hash
 from model import (
     StopTrainingCallback,
     append_results_file,
@@ -21,16 +20,14 @@ class TrainingCancelled(Exception):
 class FlowerNumPyClient(fl.client.NumPyClient):
     def __init__(
         self,
-        login: str,
-        senha: str,
+        pubkey_hex: str,
         data_dir: str,
         cancel_event: threading.Event,
         epochs: int = 5,
         results_path: str = "results.txt",
         on_metrics: Optional[Callable[[dict], None]] = None,
     ):
-        self.login = login
-        self.senha = senha
+        self.pubkey_hex = pubkey_hex
         self.cancel_event = cancel_event
         self.epochs = epochs
         self.results_path = results_path
@@ -40,8 +37,8 @@ class FlowerNumPyClient(fl.client.NumPyClient):
         self.train_ds, self.val_ds = load_client_dataset(data_dir)
 
     def get_properties(self, config):
-        # Token de autenticacao enviado ao servidor no handshake (ver auth.py).
-        return {"auth_hash": generate_auth_hash(self.login, self.senha)}
+        # Identidade NOSTR enviada ao servidor no handshake (ver nostr_groups.py).
+        return {"nostr_pubkey": self.pubkey_hex}
 
     def get_parameters(self, config):
         return self.model.get_weights()

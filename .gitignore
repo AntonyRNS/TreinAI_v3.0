@@ -4,3 +4,4 @@ __pycache__/
 *.log
 cnn_model.keras
 results.txt
+.env
